@@ -21,4 +21,4 @@ Read `INVENTORY.md` first. Then study each project's own README, docs, source, d
 - SIQE evidence/database and original dataset are excluded, so old empirical claims cannot be replayed.
 - Prometheus contains source and public references only; its runtime OMP extension and private solutions/memory are excluded.
 - The OMP Claude tracing tool, which had a checked-in private-key debug pair, was omitted from the source snapshot.
-- No tests or runtime smoke commands were run for this bundle. Run only a scoped test after reviewing its fixture/data paths and effects.
+- Smoke run: `projects/autogenesis/tests/test_property_verifier.py` passed (five property suites, including 30,000-record streaming). No other project tests or runtime integrations were run.
