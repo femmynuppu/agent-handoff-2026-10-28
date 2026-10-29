@@ -1,0 +1,3 @@
+# Prometheus snapshot for handoff
+
+This is a project source snapshot only. See the project `README.md` for explicit blocked-state/cost/safety limits. It omits `references/private/`, local memory, machine discovery and runtime logs, and the OMP extension that used source-machine absolute paths. Some copied tests formerly read installed Hermes source from an absolute user path; those tests have been withheld. Review references, dependencies and paths before running; no live worker or inference was run for the handoff.

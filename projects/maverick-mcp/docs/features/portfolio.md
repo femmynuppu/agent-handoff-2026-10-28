@@ -1,0 +1,207 @@
+# Portfolio Feature
+
+The portfolio feature persists personal holdings locally and lets analysis tools
+use that context when the user asks about "my holdings" or an owned ticker.
+
+This is educational tooling only. It is not investment, tax, or trading advice.
+
+## Capabilities
+
+- Add, remove, view, and clear local portfolio positions.
+- Store one default personal portfolio named `My Portfolio`.
+- Track shares, average cost basis, total cost, purchase date, and optional
+  notes.
+- Calculate live current value and unrealized P&L when current prices are
+  available.
+- Expose holdings through the `portfolio://my-holdings` MCP resource.
+- Let portfolio-aware tools auto-fill owned tickers for comparison,
+  correlation, and risk analysis.
+
+## MCP Surfaces
+
+`maverick/portfolio/tools.py` (positions/risk/watchlist) and
+`tools_journal.py` (trade journal) register 21 `portfolio_*` tools total,
+including:
+
+- `portfolio_add_position`
+- `portfolio_get_my_portfolio`
+- `portfolio_remove_position`
+- `portfolio_clear_portfolio`
+- `portfolio_compare_tickers`
+- `portfolio_correlation_analysis`
+- `portfolio_risk_adjusted_analysis`
+
+The risk dashboard (`portfolio_get_risk_dashboard`,
+`portfolio_check_position_risk`, `portfolio_get_regime_adjusted_sizing`,
+`portfolio_get_risk_alerts`), watchlist (`portfolio_watchlist_*`), and trade
+journal (`portfolio_journal_*`, `portfolio_get_strategy_performance`) tools
+also live in this domain; see `ARCHITECTURE.md` for the full tool
+count.
+
+## Cost Basis Method
+
+MaverickMCP uses the average cost method:
+
+```text
+Average cost basis = total cost of all shares / total number of shares
+```
+
+When adding shares to an existing position:
+
+```python
+new_total_shares = existing_shares + new_shares
+new_total_cost = existing_total_cost + (new_shares * purchase_price)
+new_average_cost = new_total_cost / new_total_shares
+```
+
+When selling part of a position, the remaining position keeps the same average
+cost basis:
+
+```python
+new_shares = existing_shares - sold_shares
+new_total_cost = new_shares * average_cost_basis
+```
+
+When all shares are removed, the position row is removed.
+
+## Sector Tagging
+
+`portfolio_add_position` best-effort populates each position's GICS sector
+from yfinance fundamentals. Provider failures store `NULL` and never block
+the position write; existing databases gain the nullable sector column
+automatically at startup.
+
+Positions without a sector surface as `Unknown`. Portfolio snapshots expose
+`sector_exposure` as the fraction of portfolio value in each sector. The risk
+dashboard keeps the `Unknown` concentration bucket visible, but that bucket
+never produces a sector-concentration alert.
+
+## Precision Rules
+
+- Use `Decimal` for financial calculations.
+- Shares support fractional quantities.
+- Persist shares rounded half-up to 8 decimal places.
+- Persist average cost basis and total cost rounded half-up to 4 decimal
+  places.
+- Round only at storage or display boundaries.
+- Do not use float math for cost-basis calculations.
+
+## Validation Rules
+
+- Tickers are normalized to uppercase.
+- Shares added or removed must be positive.
+- Purchase price must be positive.
+- Removing more shares than owned closes the position.
+- A sale amount is rounded to 8 places before it is subtracted. A sale whose
+  remaining shares round to 0 at 8 places, or whose remaining total cost
+  rounds to 0 at 4 places, closes the position.
+- A purchase is rejected as too small when its total cost rounds to 0 at 4
+  places (or its share count or average cost basis rounds to 0), for example
+  0.001 shares at 0.01. A purchase added to an existing position is also
+  rejected when its own share count rounds to 0 at 8 places, because it would
+  change the cost without adding shares.
+- A sale amount that rounds to 0 at 8 places is rejected rather than treated
+  as a sale of nothing.
+- Current price may be unavailable; in that case portfolio display should
+  degrade without inventing market values.
+
+## P&L Calculation
+
+```text
+Current value = shares * current price
+Unrealized P&L = current value - total cost
+P&L percentage = unrealized P&L / total cost * 100
+```
+
+If total cost is zero, return a safe zero percentage rather than dividing by
+zero. A zero-cost position should not normally exist because validation rejects
+zero or negative purchase prices.
+
+## Position-Aware Analysis
+
+Portfolio-aware tools should still work with explicit tickers. When no explicit
+tickers are supplied and the portfolio has holdings, they can use the portfolio
+tickers automatically. Responses should clearly indicate when portfolio context
+was used.
+
+## Storage
+
+Positions are stored in the `pf_portfolios` and `pf_positions` tables
+(SQLAlchemy Core, `maverick/portfolio/data.py`). The active personal-use
+default is a single local portfolio, not a hosted multi-user product.
+
+The ledger rounds shares to 8 decimal places and average cost basis and
+total cost to 4, half-up, the same scales the columns declare. SQLite and
+Postgres therefore both store exactly what the ledger computed. SQLite stores
+floats, so its exactness holds up to 15 significant digits: shares below
+10,000,000 and costs below 100,000,000,000.
+
+## Concurrent position changes
+
+Adding shares, removing shares, and clearing a portfolio each run in a single
+serialized transaction. SQLite reserves its database write lock before reading
+positions. PostgreSQL locks the parent portfolio row. Service instances and
+processes using the same database therefore preserve acknowledged changes.
+The sector lookup happens before the transaction, so a network request does
+not hold a database lock. Failed transactions roll back.
+
+Reading a missing portfolio does not create a portfolio row. A cancelled call
+can still commit if its database worker has already started. Read the current
+holdings before retrying a cancelled mutation because its outcome may be
+unknown to the caller.
+
+## Trade journal validation and precision
+
+Journal sides accept `long` or `short`, without regard to letter case. Entry
+prices, exit prices, and share quantities must be finite and greater than zero.
+Invalid service calls raise `ValueError`; MCP tools return an error without
+changing the trade. A closed trade cannot be closed again. In the add, close,
+and review tool results, `status` is the call's result (`success` or `error`)
+and `trade_status` is the trade's own `open` or `closed` state.
+
+Unit prices keep sub-cent precision within the existing Float storage limits.
+The service calculates profit or loss with `Decimal` and rounds the final
+amount to cents using half-up rounding. For example, 10,000 long shares entered
+at $0.0041 and closed at $0.0051 produce $10.00 of profit. Existing journal rows
+and column types are not rewritten.
+
+Exit dates cannot precede entry dates. Date-only and naive timestamps mean UTC,
+and explicit offsets are converted to UTC before storage. Historical SQLite
+rows without timezone information are interpreted as UTC because their original
+offsets cannot be recovered.
+
+
+## ATR position sizing and correlation
+
+The ATR sizing tool uses a cash-risk budget of `account × 1% × risk_level/100`.
+It divides that budget by the returned entry-to-stop distance, rounds down to
+whole shares, and caps the position at available account cash. Position value
+is shares times entry price; `max_risk_amount` is shares times stop distance.
+Reward/risk is the target-to-entry distance divided by the entry-to-stop distance.
+These calculations use Decimal until response serialization.
+
+For an account of 100,000, price of 100, ATR of 2, and risk level 50, the tool
+returns a stop of 97, target of 103, 166 shares, position value of 16,600,
+maximum price-distance risk of 498, and reward/risk of 1.0. Doubling ATR halves
+the whole-share limit to 83. Risk level zero sizes zero shares. Invalid or
+nonpositive prices, ATR, account values, or stops return an error.
+
+`confidence_score` is null, with an explanation that this is a sizing heuristic,
+not a calibrated probability. It does not estimate execution gaps or slippage.
+Unit prices retain sub-cent precision; cash amounts are displayed to cents.
+
+Correlation excludes matrix diagonals by position, so a correlation of exactly
+1.0 between two distinct symbols remains in the average. Constant prices or
+other undefined correlations produce an error instead of a diversification score.
+
+
+## Watchlist discovery
+
+`portfolio_watchlist_list` is read-only and returns `watchlists`, ordered by
+creation ID, with each list's ID, name, and description, plus the total count. It performs
+no quote lookup. Use an existing ID for additions, removals, and briefings.
+An empty database returns an empty list.
+
+`portfolio_watchlist_brief` returns success with no items for an existing empty
+watchlist. An unknown ID returns an error before fetching quotes, so a client
+can distinguish a missing list from an empty one.

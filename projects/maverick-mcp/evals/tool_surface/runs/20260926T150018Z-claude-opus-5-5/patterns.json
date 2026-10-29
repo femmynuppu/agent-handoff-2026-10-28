@@ -1,0 +1,48 @@
+{
+  "status": "draft",
+  "created": "2026-09-27T10:37:14.113484+00:00",
+  "failure_modes": [
+    {
+      "name": "Acts on a guess instead of asking",
+      "description": "The request leaves out something the action or answer depends on (which stock, which date or year, the user's goals), and the assistant records data or gives a specific answer using a value it assumed instead of asking first. Saying what it assumed does not make it a pass.",
+      "notes": [
+        {
+          "trace_id": "q09",
+          "span_id": null
+        },
+        {
+          "trace_id": "q14",
+          "span_id": null
+        }
+      ]
+    },
+    {
+      "name": "Market data missing or unreliable",
+      "description": "The method is sound, but the local market data behind the answer is empty, stale, or does not cover enough history, so a figure is wrong or the question cannot be answered.",
+      "notes": [
+        {
+          "trace_id": "q04",
+          "span_id": null
+        },
+        {
+          "trace_id": "q07",
+          "span_id": null
+        }
+      ]
+    },
+    {
+      "name": "Tool result misleading or unusable",
+      "description": "A Maverick tool reports success for input it could not serve, rejects valid input with a misleading error, or returns a result too large for the client to read.",
+      "notes": [
+        {
+          "trace_id": "q02",
+          "span_id": null
+        },
+        {
+          "trace_id": "q15",
+          "span_id": null
+        }
+      ]
+    }
+  ]
+}

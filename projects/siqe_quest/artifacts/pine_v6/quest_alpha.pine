@@ -1,0 +1,65 @@
+//@version=6
+// SIQE QUEST research only. Compilation: NOT_VERIFIED; parity: NOT_VERIFIED.
+// canonical_spec_sha256: 896edf73840d091dd60dcc94e1c2fc7355a5082b932838d6d9eeb7a06bf333f9
+// source_vintage_sha256: ee6e3cd6a5f1977f7b4681d3ab89f1e2ba92b380ca73e4563293e750677d53e7
+// Reference daily averages are NOT chart OHLC; next-open != next-reference fills.
+strategy("SIQE QUEST USD/CAD SMA20/60 research", overlay = true,
+     initial_capital = 10000, currency = currency.CAD,
+     default_qty_type = strategy.fixed, default_qty_value = 1000,
+     pyramiding = 0, commission_type = strategy.commission.percent,
+     commission_value = 0.05, slippage = 1, margin_long = 100, margin_short = 100,
+     process_orders_on_close = false, calc_on_every_tick = false,
+     calc_on_order_fills = false, use_bar_magnifier = false)
+
+// Research splits are locked retrospectively, not prospectively preregistered.
+segment = input.string("Test 2025", "Isolated research segment",
+     options = ["Train 2023", "Validation 2024", "Test 2025"])
+startYear = segment == "Train 2023" ? 2023 : segment == "Validation 2024" ? 2024 : 2025
+startTime = timestamp("America/Toronto", startYear, 1, 1, 0, 0)
+endTime = timestamp("America/Toronto", startYear + 1, 1, 1, 0, 0)
+inSegment = time >= startTime and time < endTime
+// Set BEFORE running: opening timestamp of penultimate chart bar in chosen year.
+// Its confirmed-close exit fills at final chart open, not final reference average.
+exitSignalTime = input.time(0, "Required scheduled exit SIGNAL bar timestamp")
+scheduledExit = time >= exitSignalTime
+
+if barstate.isfirst
+    if syminfo.type != "forex" or syminfo.basecurrency != "USD" or syminfo.currency != "CAD"
+        runtime.error("Use a standard USD/CAD forex chart, not an inverse or derivative.")
+    if not timeframe.isdaily or timeframe.multiplier != 1 or not chart.is_standard
+        runtime.error("Use standard one-day OHLC bars; synthetic/intraday charts unsupported.")
+    if math.abs(syminfo.mintick - 0.00001) > 0.0000000001 or math.abs(syminfo.pointvalue - 1.0) > 0.0000000001
+        runtime.error("Expected tick size 0.00001 and point value 1; review unit conventions.")
+    if exitSignalTime < startTime or exitSignalTime >= endTime
+        runtime.error("Set the scheduled exit SIGNAL timestamp inside the selected segment before running.")
+
+fast = ta.sma(close, 20)
+slow = ta.sma(close, 60)
+warmed = bar_index >= 59 and not na(fast) and not na(slow)
+entryCondition = warmed and fast > slow
+exitCondition = warmed and fast <= slow
+confirmed = barstate.isconfirmed and warmed and inSegment
+// Orders are market orders, created on confirmed close and filled next chart open.
+if confirmed
+    if scheduledExit
+        if strategy.position_size > 0
+            strategy.close("Long", comment = "Scheduled segment liquidation")
+    else
+        if entryCondition and strategy.position_size == 0
+            strategy.entry("Long", strategy.long, qty = 1000)
+        if exitCondition and strategy.position_size > 0
+            strategy.close("Long")
+
+plot(fast, "SIQE fast SMA20", color = color.teal)
+plot(slow, "SIQE slow SMA60", color = color.orange)
+plot(confirmed ? (entryCondition ? 1 : 0) : na, "SIQE entry condition", display = display.data_window)
+plot(confirmed ? (exitCondition ? 1 : 0) : na, "SIQE exit condition", display = display.data_window)
+plot(confirmed ? (entryCondition ? 1 : 0) : na, "SIQE long target", display = display.data_window)
+plot(confirmed ? (scheduledExit ? 1 : 0) : na, "SIQE scheduled liquidation condition", display = display.data_window)
+plot(time, "SIQE bar timestamp ms", display = display.data_window)
+plot(strategy.equity, "SIQE equity CAD", display = display.data_window)
+var float peakEquity = 10000.0
+peakEquity := math.max(peakEquity, strategy.equity)
+plot(strategy.equity / peakEquity - 1.0, "SIQE drawdown fraction", display = display.data_window)
+// No same-close execution or last-bar hindsight; scheduled exit still uses next open.
+// No request.security(), imports, lookahead, live routing or direct webhook delivery.

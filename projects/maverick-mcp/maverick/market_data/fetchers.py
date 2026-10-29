@@ -1,0 +1,372 @@
+"""External market data fetchers. Third layer: imports only the platform."""
+
+import asyncio
+import math
+import re
+from collections.abc import Callable
+from typing import Any
+
+import pandas as pd
+
+from maverick.platform.config import HttpSettings
+from maverick.platform.http import get_breaker
+
+_YFINANCE_RETRIES = 2
+
+# Yahoo spells class shares with a dash (BRK-B), but people type a dot
+# (BRK.B). Exchange suffixes also use a dot (VOD.L, 7203.T), so the dash
+# spelling is only a fallback for a dotted symbol whose own fetch came back
+# empty.
+_CLASS_SHARE_SYMBOL = re.compile(r"^[A-Z]{1,5}\.[A-Z]$")
+
+HistoryFn = Callable[..., pd.DataFrame]
+InfoFn = Callable[[str], dict[str, Any]]
+DownloadFn = Callable[..., dict[str, pd.DataFrame]]
+MoverTierFn = Callable[[str, int], list[dict[str, Any]]]
+
+
+def _default_history_fn(
+    symbol: str, start: Any, end: Any, interval: str = "1d"
+) -> pd.DataFrame:
+    import yfinance as yf
+
+    return yf.Ticker(symbol).history(start=start, end=end, interval=interval)
+
+
+def _default_info_fn(symbol: str) -> dict[str, Any]:
+    import yfinance as yf
+
+    return yf.Ticker(symbol).info
+
+
+def _default_download_fn(
+    symbols: list[str], period: str = "1d"
+) -> dict[str, pd.DataFrame]:
+    import yfinance as yf
+
+    raw = yf.download(symbols, period=period, group_by="ticker", threads=True)
+    if len(symbols) == 1:
+        return {symbols[0]: raw}
+    return {
+        symbol: raw[symbol]
+        for symbol in symbols
+        if symbol in raw.columns.get_level_values(0)
+    }
+
+
+def _strip_tz(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return `frame` with a tz-naive index, copying only if a tz is present."""
+    index = frame.index
+    if isinstance(index, pd.DatetimeIndex) and index.tz is not None:
+        frame = frame.copy()
+        frame.index = index.tz_localize(None)
+    return frame
+
+
+def _class_share_alias(symbol: str) -> str | None:
+    """Yahoo's dash spelling of a dotted class-share symbol, else None."""
+    if _CLASS_SHARE_SYMBOL.match(symbol):
+        return symbol.replace(".", "-")
+    return None
+
+
+def info_price(info: dict[str, Any]) -> float | None:
+    """The price in a yfinance `info` dict, or None when it has no usable one.
+
+    For a symbol it has no data for (delisted, unknown, or a class share
+    spelled with a dot), Yahoo returns a stub `info` dict of metadata keys
+    with no price, so a missing, zero, or non-finite price is how "no data"
+    shows up.
+    """
+    for key in ("currentPrice", "regularMarketPrice"):
+        price = info.get(key)
+        if isinstance(price, int | float) and math.isfinite(price) and price > 0:
+            return float(price)
+    return None
+
+
+class YFinanceFetcher:
+    """Injectable yfinance wrapper with circuit-breaker and retry resilience.
+
+    The default `*_fn` bindings lazily `import yfinance` only when actually
+    invoked, so constructing this class (or importing this module) never
+    imports yfinance — tests inject fakes and never hit the real bindings.
+
+    `history` and `info` retry a dotted class-share symbol (`BRK.B`) once
+    with Yahoo's dash spelling (`BRK-B`) when the first fetch has no data.
+    """
+
+    def __init__(
+        self,
+        history_fn: HistoryFn | None = None,
+        info_fn: InfoFn | None = None,
+        download_fn: DownloadFn | None = None,
+        *,
+        breaker_name: str = "yfinance",
+        http_settings: HttpSettings | None = None,
+    ) -> None:
+        self._history_fn = history_fn or _default_history_fn
+        self._info_fn = info_fn or _default_info_fn
+        self._download_fn = download_fn or _default_download_fn
+        self._breaker_name = breaker_name
+        self._http_settings = http_settings
+
+    @property
+    def download_fn(self) -> DownloadFn:
+        """The resolved sync batch-download callable (real yfinance, or an injected fake)."""
+        return self._download_fn
+
+    async def _call(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        breaker = get_breaker(self._breaker_name, self._http_settings)
+
+        async def _attempt() -> Any:
+            last_exc: Exception | None = None
+            for attempt in range(_YFINANCE_RETRIES + 1):
+                try:
+                    return await asyncio.to_thread(fn, *args, **kwargs)
+                except Exception as exc:
+                    last_exc = exc
+                    if attempt >= _YFINANCE_RETRIES:
+                        raise
+            assert last_exc is not None  # pragma: no cover - loop always raises
+            raise last_exc
+
+        return await breaker.call(_attempt)
+
+    async def history(
+        self, symbol: str, start: Any, end: Any, interval: str = "1d"
+    ) -> pd.DataFrame:
+        frame = await self._call(self._history_fn, symbol, start, end, interval)
+        alias = _class_share_alias(symbol)
+        if alias is not None and frame.empty:
+            frame = await self._call(self._history_fn, alias, start, end, interval)
+        return _strip_tz(frame)
+
+    async def batch_history(
+        self, symbols: list[str], period: str = "1d"
+    ) -> dict[str, pd.DataFrame]:
+        frames = await self._call(self._download_fn, symbols, period)
+        return {symbol: _strip_tz(frame) for symbol, frame in frames.items()}
+
+    async def info(self, symbol: str) -> dict[str, Any]:
+        info = await self._call(self._info_fn, symbol)
+        alias = _class_share_alias(symbol)
+        if alias is not None and info_price(info) is None:
+            retried = await self._call(self._info_fn, alias)
+            if info_price(retried) is not None:
+                return retried
+        return info
+
+
+class MoverFetcher:
+    """Two-tier mover lookup: finviz -> yfinance batch.
+
+    Each tier is an injected callable. A raised exception or an empty result
+    from a tier falls through to the next one; exhausting both tiers (or
+    having none configured) returns `[]`.
+    """
+
+    def __init__(
+        self,
+        finviz_fn: MoverTierFn | None = None,
+        batch_quote_fn: MoverTierFn | None = None,
+    ) -> None:
+        self._finviz_fn = finviz_fn
+        self._batch_quote_fn = batch_quote_fn
+
+    async def _from_finviz(self, kind: str, limit: int) -> list[dict[str, Any]]:
+        if self._finviz_fn is None:
+            return []
+        try:
+            return await asyncio.to_thread(self._finviz_fn, kind, limit)
+        except Exception:
+            return []
+
+    async def _from_batch_quote(self, kind: str, limit: int) -> list[dict[str, Any]]:
+        if self._batch_quote_fn is None:
+            return []
+        try:
+            return await asyncio.to_thread(self._batch_quote_fn, kind, limit)
+        except Exception:
+            return []
+
+    async def _movers(self, kind: str, limit: int) -> list[dict[str, Any]]:
+        for tier in (self._from_finviz, self._from_batch_quote):
+            result = await tier(kind, limit)
+            if result:
+                return result
+        return []
+
+    async def gainers(self, limit: int) -> list[dict[str, Any]]:
+        return await self._movers("gainers", limit)
+
+    async def losers(self, limit: int) -> list[dict[str, Any]]:
+        return await self._movers("losers", limit)
+
+    async def most_active(self, limit: int) -> list[dict[str, Any]]:
+        return await self._movers("most_active", limit)
+
+
+# ---------------------------------------------------------------------------
+# Production MoverFetcher wiring
+# ---------------------------------------------------------------------------
+
+_FINVIZ_FILTERS = {
+    "gainers": {"Change": "Up 5%", "Average Volume": "Over 1M", "Price": "Over $5"},
+    "losers": {"Change": "Down 5%", "Average Volume": "Over 1M", "Price": "Over $5"},
+    "most_active": {"Average Volume": "Over 20M", "Price": "Over $5"},
+}
+
+# Small, liquid last-resort universe for the yfinance tier -- yfinance has no
+# screener API, so this tier can only re-rank a fixed candidate list rather
+# than discover movers the way finviz does.
+_YFINANCE_TIER_SYMBOLS = (
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "TSLA",
+    "META",
+    "NVDA",
+    "JPM",
+    "V",
+    "JNJ",
+    "UNH",
+    "PG",
+    "HD",
+    "MA",
+    "DIS",
+)
+
+
+# finviz heads the column "Change %"; older pages headed it "Change".
+_FINVIZ_CHANGE_COLUMNS = ("Change %", "Change")
+
+
+def _finviz_percent(cell: Any) -> float | None:
+    """A finviz change cell as a percent (5.73), or None when it has none.
+
+    finvizfinance keeps a column it does not know as page text ("5.73%").
+    A column it does know goes through its `number_covert`, which turns
+    "5.73%" into the fraction 0.0573.
+    """
+    if isinstance(cell, str):
+        try:
+            return float(cell.strip().rstrip("%"))
+        except ValueError:
+            return None
+    if isinstance(cell, int | float) and math.isfinite(cell):
+        return float(cell) * 100
+    return None
+
+
+def _finviz_tier(kind: str, limit: int) -> list[dict[str, Any]]:
+    """Sync finviz screener tier. Imports `finvizfinance` lazily, on call.
+
+    Raises when the screen has no change column, so `MoverFetcher` falls
+    through to the next tier rather than return unranked rows as movers.
+    """
+    from finvizfinance.screener.overview import Overview
+
+    screener = Overview()
+    screener.set_filter(filters_dict=_FINVIZ_FILTERS.get(kind, {}))
+    df = screener.screener_view()
+    if df is None or df.empty:
+        return []
+
+    column = next((c for c in _FINVIZ_CHANGE_COLUMNS if c in df.columns), None)
+    if column is None:
+        raise ValueError(f"finviz screen has no change column: {list(df.columns)}")
+    df = df.assign(_percent=df[column].map(_finviz_percent).astype(float))
+    sort_column = "Volume" if kind == "most_active" else "_percent"
+    # A row with no ranking value is not a mover. With none left, return []
+    # so MoverFetcher falls through to the yfinance tier.
+    df = df[pd.to_numeric(df[sort_column], errors="coerce").notna()]
+    if df.empty:
+        return []
+    df = df.sort_values(sort_column, ascending=(kind == "losers"))
+
+    rows: list[dict[str, Any]] = []
+    for _, row in df.head(limit).iterrows():
+        price = row.get("Price")
+        percent = _finviz_percent(row.get(column))
+        change = None
+        # finviz has no absolute change; derive it from the prior close.
+        if isinstance(price, int | float) and percent is not None and percent > -100:
+            change = price - price / (1 + percent / 100)
+        rows.append(
+            {
+                "symbol": row.get("Ticker"),
+                "price": price,
+                "change": change,
+                "change_percent": percent,
+                "volume": row.get("Volume"),
+            }
+        )
+    return rows
+
+
+def _build_yfinance_tier(download_fn: DownloadFn) -> MoverTierFn:
+    """Bind the sync tier-2 callable `MoverFetcher` runs via `asyncio.to_thread`.
+
+    Calls the raw sync `download_fn` binding directly -- no breaker, no
+    retry, no nested event loop -- because `MoverFetcher._from_batch_quote`
+    already schedules this closure onto a worker thread via `asyncio.
+    to_thread`. An earlier version routed through `YFinanceFetcher.
+    batch_history` (async) via a nested `asyncio.run(...)` inside that
+    worker thread; that could deadlock forever under contention, because
+    the shared process-global "yfinance" `CircuitBreaker`'s `asyncio.Lock`
+    binds to whichever event loop first hits its contended `acquire()`
+    path, and `Future.set_result` called across threads doesn't wake a
+    selector blocked on a *different* thread's loop. Calling `download_fn`
+    directly sidesteps the breaker (and its lock) entirely.
+    """
+
+    def _call(kind: str, limit: int) -> list[dict[str, Any]]:
+        frames = download_fn(list(_YFINANCE_TIER_SYMBOLS), period="2d")
+        rows: list[dict[str, Any]] = []
+        for symbol, frame in frames.items():
+            if frame is None or frame.empty or len(frame) < 2:
+                continue
+            prev_close = float(frame["Close"].iloc[0])
+            current = float(frame["Close"].iloc[-1])
+            change = current - prev_close
+            change_percent = (change / prev_close * 100) if prev_close else 0.0
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "price": current,
+                    "change": change,
+                    "change_percent": change_percent,
+                    "volume": int(frame["Volume"].iloc[-1]),
+                }
+            )
+
+        if kind == "most_active":
+            rows.sort(key=lambda r: r["volume"], reverse=True)
+        else:
+            rows.sort(key=lambda r: r["change_percent"], reverse=(kind == "gainers"))
+        return rows[:limit]
+
+    return _call
+
+
+def build_mover_fetcher(
+    yf: YFinanceFetcher,
+    download_fn: DownloadFn | None = None,
+) -> MoverFetcher:
+    """Production factory: wire the two-tier mover fallback chain.
+
+    Tier 1 (finviz) is bound unconditionally but never imports
+    `finvizfinance` until the tier actually runs. Tier 2 falls back to a
+    small liquid-stock scan using a raw sync download callable, called
+    directly (never through `yf.batch_history`'s async/breaker path -- see
+    `_build_yfinance_tier`). Defaults to reusing `yf`'s own resolved
+    `_download_fn` binding (the lazy real yfinance binding in production,
+    or whatever a test injected into `yf`); pass `download_fn` explicitly
+    to override it independently of `yf`.
+    """
+    return MoverFetcher(
+        finviz_fn=_finviz_tier,
+        batch_quote_fn=_build_yfinance_tier(download_fn or yf.download_fn),
+    )

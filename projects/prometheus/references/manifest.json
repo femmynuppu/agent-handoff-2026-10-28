@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "logic",
+      "requested_url": "https://lean-lang.org/theorem_proving_in_lean4/propositions_and_proofs.html",
+      "retrieved_url": "https://lean-lang.org/theorem_proving_in_lean4/Propositions-and-Proofs/",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "4e0d7c50952003efd9c0c460145c4d3e64f9408786c17d6bf9f4584dd6d0b284",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "From a proof of `Implies p q` and a proof of `p`, we obtain a proof of `q`.",
+      "location": "3.1 Propositions as Types / modus ponens",
+      "domains": [
+        "epistemology"
+      ],
+      "access_license_limitations": "Author-maintained Lean book; short quotation only, redistribution license not independently checked."
+    },
+    {
+      "id": "provenance",
+      "requested_url": "https://www.w3.org/TR/prov-dm/",
+      "retrieved_url": "https://www.w3.org/TR/2013/REC-prov-dm-20130430/",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "91c91de0286055fc8949c74ee5e66ab24a69bc3e8a13a5dad5bffeb0f3e1a2d0",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "PROV-DM is a core data model for provenance for building representations of the entities, people and processes involved in producing a piece of data or thing in the world.",
+      "location": "Abstract",
+      "domains": [
+        "research",
+        "epistemology"
+      ],
+      "access_license_limitations": "W3C Recommendation via W3C API abstract; not full specification retrieval; W3C document terms apply."
+    },
+    {
+      "id": "rational",
+      "requested_url": "https://docs.python.org/3/library/fractions.html",
+      "retrieved_url": "https://docs.python.org/3/library/fractions.html",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "c4e381c570aaccca0b222f155ccb125fe23b44a3dd197c4717f305bbef72f91a",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "The `fractions` module provides support for rational number arithmetic.",
+      "location": "module-fractions / opening paragraph",
+      "domains": [
+        "math"
+      ],
+      "access_license_limitations": "PSF License v2; documentation examples also Zero Clause BSD as stated on fetched page."
+    },
+    {
+      "id": "statistics",
+      "requested_url": "https://docs.python.org/3/library/statistics.html",
+      "retrieved_url": "https://docs.python.org/3/library/statistics.html",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "e6aa64d6731f9da5c5f8913b58291f08c28cae8a88c58f491d1ac148b5689f31",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "The arithmetic mean is the sum of the data divided by the number of data points.",
+      "location": "statistics.mean",
+      "domains": [
+        "statistics"
+      ],
+      "access_license_limitations": "PSF documentation; narrow prose excerpt only."
+    },
+    {
+      "id": "statements",
+      "requested_url": "https://fiscal.treasury.gov/system/files/2026-03/executive-summary-2025.pdf",
+      "retrieved_url": "https://fiscal.treasury.gov/system/files/2026-03/executive-summary-2025.pdf",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "c7eb02de2d178c3aec887c88dcc80704cbddf86f67efc62590117547498ea1ee",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "The government’s accrual-based net position, (the difference between its assets and liabilities), and its “bottom line” net operating cost (the difference between its revenues and costs) are also key financial indicators.",
+      "location": "PDF page 3 / Where We Are Now",
+      "domains": [
+        "financial_statements"
+      ],
+      "access_license_limitations": "Official US Treasury PDF converted to text by read; verify extracted typography against original for publication; no blanket license conclusion."
+    },
+    {
+      "id": "bills",
+      "requested_url": "https://www.treasurydirect.gov/marketable-securities/treasury-bills/",
+      "retrieved_url": "https://www.treasurydirect.gov/marketable-securities/treasury-bills/",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "4fc516ef874ee19fa8896a926ac13d8897efb04b90bb2f7f855c36858b122370",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "Bills are sold at a discount or at par (face value). When the bill matures, you are paid its face value.",
+      "location": "Treasury Bills / opening",
+      "domains": [
+        "quant_finance"
+      ],
+      "access_license_limitations": "Official US Treasury webpage; narrow excerpt; third-party page assets not redistributed."
+    },
+    {
+      "id": "debugger",
+      "requested_url": "https://docs.python.org/3/library/pdb.html",
+      "retrieved_url": "https://docs.python.org/3/library/pdb.html",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "2f59593791021be4ab656e042197ab92e5e63c0101d06bbca8d7889fd1d56c99",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "It also supports post-mortem debugging and can be called under program control.",
+      "location": "module-pdb / opening",
+      "domains": [
+        "software_debugging"
+      ],
+      "access_license_limitations": "PSF documentation; narrow prose excerpt only."
+    },
+    {
+      "id": "json",
+      "requested_url": "https://www.rfc-editor.org/rfc/rfc8259",
+      "retrieved_url": "https://www.rfc-editor.org/rfc/rfc8259",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "7081c92b764d57657acb9b8f750d18ee05eaae0bd5d7af68e7129de4fb45e623",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "The names within an object SHOULD be unique.",
+      "location": "section 4 / Objects",
+      "domains": [
+        "tool_workflows"
+      ],
+      "access_license_limitations": "IETF Trust Legal Provisions / BCP78; narrow unmodified quotation; not a full redistributed RFC."
+    },
+    {
+      "id": "injection",
+      "requested_url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+      "retrieved_url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "4b77d0ca8773e73b5509027998b102ddc13d18200330816e36c166f0f1187bc0",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "Separate and clearly denote untrusted content to limit its influence on user prompts.",
+      "location": "Prevention and Mitigation / 6. Segregate and identify external content",
+      "domains": [
+        "adversarial_reasoning"
+      ],
+      "access_license_limitations": "OWASP project maintainer guidance; narrow excerpt; page-specific license not independently verified."
+    },
+    {
+      "id": "brier",
+      "requested_url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html",
+      "retrieved_url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "RETRIEVED",
+      "retrieval_tool": "functions.read",
+      "http_status": null,
+      "http_status_note": "Successful readable content; tool did not expose numeric HTTP status.",
+      "content_sha256": "c3fee6cc8d4de410f3a5fe4748151b4c370b528dab2b4e622b2c689bc4687593",
+      "hash_scope": "UTF-8 frozen narrow excerpt, not remote full document bytes",
+      "quote": "The Brier score measures the mean squared difference between the predicted probability and the actual outcome.",
+      "location": "brier_score_loss / opening",
+      "domains": [
+        "uncertainty_decision_theory",
+        "statistics"
+      ],
+      "access_license_limitations": "Maintainer API documentation; narrow excerpt; page-specific documentation license not independently verified."
+    },
+    {
+      "requested_url": "https://www.sec.gov/investor/pubs/begfinstmtguide.htm",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "FAILED",
+      "http_status": 403,
+      "domains": [
+        "financial_statements"
+      ],
+      "access_license_limitations": "Forbidden; not verified as a usable reference."
+    },
+    {
+      "requested_url": "https://www.ifrs.org/issued-standards/ifrs-taxonomy/",
+      "retrieved_at_utc": "2026-10-25T10:48:10.878783+00:00",
+      "status": "PARTIAL_NOT_USABLE",
+      "http_status": null,
+      "domains": [
+        "financial_statements"
+      ],
+      "access_license_limitations": "Read returned cookie/navigation material only; not counted toward verified accounting coverage."
+    }
+  ],
+  "notice": "Hashes cover exact stored narrow excerpt UTF-8, not remote document bytes; readable retrieval is not license clearance. Quote markup follows tool-rendered text."
+}

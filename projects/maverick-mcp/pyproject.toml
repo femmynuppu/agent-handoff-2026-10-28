@@ -1,0 +1,316 @@
+[project]
+name = "maverick-mcp-server"
+version = "1.2.1"
+description = "Personal-use MCP server for Claude Desktop providing professional-grade stock analysis and technical indicators"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Core MCP and server dependencies. FastMCP 4 owns the MCP SDK version
+    # (no direct `mcp` pin: nothing here imports it). FastMCP 4 no longer
+    # depends on httpx, and maverick/platform/http.py imports it directly,
+    # so the httpx pin below is load-bearing.
+    "fastmcp>=4.0.3",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.2",
+    # Every domain's config.py and types.py imports pydantic directly.
+    "pydantic>=2.13.4",
+    # Database and caching. SQLAlchemy loads the drivers by URL scheme:
+    # psycopg2 for the sync `postgresql://` engine, and
+    # maverick/platform/db.py rewrites URLs to `sqlite+aiosqlite` and
+    # `postgresql+asyncpg` for the async engine. The `asyncio` extra pulls
+    # greenlet on every platform; SQLAlchemy's own requirement skips it on
+    # macOS arm64. redis-py loads hiredis at runtime when it is installed.
+    "sqlalchemy[asyncio]>=2.0.50",
+    "psycopg2-binary>=2.9.12",
+    "aiosqlite>=0.22.1",
+    "asyncpg>=0.31.0",
+    "redis[hiredis]>=8.0.1",
+    "msgpack>=1.2.1",
+    # Financial data and analysis (core)
+    "numpy>=2.5.3",
+    "pandas>=3.0.5",
+    "yfinance>=1.4.0",
+    # 1.5.0 reads the ticker from the cell's data attribute; 1.3.0 read the
+    # cell text, which now starts with a logo letter (BYND became BBYND).
+    "finvizfinance>=1.5.0",
+    "pandas-market-calendars>=5.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=2.12.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+    # CI runs pytest with --timeout=60, and tests/backtesting/test_analysis.py
+    # sets pytest.mark.timeout(300).
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.15.14",
+    "ty>=0.0.43",
+]
+backtesting = [
+    "vectorbt>=1.1.0",
+    "scikit-learn>=1.9.0",
+]
+research = [
+    "langchain-anthropic>=1.4.6",
+    "langchain-core>=1.6.3",
+    "langchain-openai>=1.3.5",
+    "langgraph>=1.2.11",
+    "exa-py>=2.13.0",
+]
+
+[project.scripts]
+maverick-mcp = "maverick.server.app:main"
+maverick-mcp-server = "maverick.server.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+# Apply private-file exclusions to direct wheel builds as well as source archives.
+exclude = [
+    "/evals/tool_surface/runs/**",
+    "/evals/tool_surface/judges/results/**",
+    "/tests/e2e/evidence/**",
+    "**/.agent_case.json",
+    "**/.git/**",
+    "**/.claude/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/.ruff_cache/**",
+    "**/*.pyc",
+    "**/*.db",
+    "**/*.db-*",
+    "**/*.sqlite*",
+    "**/*.pem",
+    "**/*.key",
+    "**/secrets.*",
+    "**/credentials.*",
+    "**/.env",
+    "**/.env.*",
+    "!/.env.example",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["maverick"]
+
+[tool.hatch.build.targets.sdist]
+# Scope the sdist explicitly so a local `uv build` on a working tree that has
+# untracked scratch dirs (.claude/, data/, .superpowers/) never sweeps them —
+# and never ships local SQLite data or deleted-legacy copies to PyPI.
+include = [
+    "maverick",
+    "tests",
+    "docs",
+    "evals",
+    "tools",
+    "scripts",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "ARCHITECTURE.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "Dockerfile",
+    "docker-compose.yml",
+    ".dockerignore",
+    ".gitignore",
+    ".python-version",
+    ".github/workflows/ci.yml",
+    "uv.lock",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    ".env.example",
+    "Makefile",
+    "server.json",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Markers for test categories
+markers = [
+    "unit: marks tests as unit tests (deselect with '-m \"not unit\"')",
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "external: marks tests that require external APIs",
+    "database: marks tests that require database access",
+    "redis: marks tests that require Redis access",
+]
+# Default to running only unit tests
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "-m", "not integration and not slow and not external",
+    "--durations=10",  # Show 10 slowest tests
+]
+# Async configuration
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "B904",  # raise without from inside except
+    "W191",  # indentation contains tabs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F403", "F405"]  # star imports allowed in tests
+
+[tool.ruff.format]
+# Ruff 0.16 stabilized Markdown code-block formatting, which was preview-gated
+# in 0.15. Keep the formatter scoped to Python so prose docs — including the
+# archived exec-plans under docs/ — keep their snippets as authored.
+exclude = ["*.md"]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.13",
+]
+
+[tool.importlinter]
+root_packages = ["maverick"]
+
+[[tool.importlinter.contracts]]
+name = "Market data layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.market_data.tools",
+    "maverick.market_data.service",
+    "maverick.market_data.data | maverick.market_data.fetchers",
+    "maverick.market_data.config",
+    "maverick.market_data.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "Screening layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.screening.tools",
+    "maverick.screening.service",
+    "maverick.screening.data | maverick.screening.screens",
+    "maverick.screening.config",
+    "maverick.screening.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "Portfolio layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.portfolio.tools : maverick.portfolio.tools_journal",
+    "maverick.portfolio.service : maverick.portfolio.service_risk : maverick.portfolio.service_watchlist : maverick.portfolio.service_journal",
+    "maverick.portfolio.analysis | maverick.portfolio.risk",
+    "maverick.portfolio.data | maverick.portfolio.ledger | maverick.portfolio.watchlist | maverick.portfolio.journal",
+    "maverick.portfolio.config",
+    "maverick.portfolio.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "Technical layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.technical.tools",
+    "maverick.technical.service",
+    "maverick.technical.indicators | maverick.technical.analysis",
+    "maverick.technical.config",
+    "maverick.technical.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "Backtesting layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.backtesting.tools : maverick.backtesting.tools_ml : maverick.backtesting.tools_support",
+    "maverick.backtesting.service : maverick.backtesting.service_ml : maverick.backtesting.service_walk_forward : maverick.backtesting.service_support",
+    "maverick.backtesting.engine | maverick.backtesting.optimization | maverick.backtesting.analysis | maverick.backtesting.strategies",
+    "maverick.backtesting.config",
+    "maverick.backtesting.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "The platform never imports domains"
+type = "forbidden"
+source_modules = ["maverick.platform"]
+forbidden_modules = ["maverick.market_data", "maverick.screening", "maverick.technical", "maverick.portfolio", "maverick.backtesting", "maverick.research", "maverick.server"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing imports the server"
+type = "forbidden"
+source_modules = ["maverick.market_data", "maverick.screening", "maverick.portfolio", "maverick.technical", "maverick.backtesting", "maverick.research", "maverick.platform"]
+forbidden_modules = ["maverick.server"]
+
+[[tool.importlinter.contracts]]
+name = "The technical indicator core never imports domains"
+type = "forbidden"
+source_modules = ["maverick.technical.indicators", "maverick.technical.analysis", "maverick.technical.config", "maverick.technical.types"]
+forbidden_modules = ["maverick.market_data", "maverick.screening", "maverick.portfolio"]
+
+[[tool.importlinter.contracts]]
+name = "Technical service and tools never import screening or portfolio"
+type = "forbidden"
+source_modules = ["maverick.technical.service", "maverick.technical.tools"]
+forbidden_modules = ["maverick.screening", "maverick.portfolio"]
+
+[[tool.importlinter.contracts]]
+name = "The backtesting core never imports domains"
+type = "forbidden"
+source_modules = ["maverick.backtesting.engine", "maverick.backtesting.optimization", "maverick.backtesting.analysis", "maverick.backtesting.strategies", "maverick.backtesting.config", "maverick.backtesting.types"]
+forbidden_modules = ["maverick.market_data", "maverick.screening", "maverick.portfolio"]
+
+[[tool.importlinter.contracts]]
+name = "Backtesting service and tools never import screening or portfolio"
+type = "forbidden"
+source_modules = ["maverick.backtesting.service", "maverick.backtesting.service_ml", "maverick.backtesting.service_walk_forward", "maverick.backtesting.service_support", "maverick.backtesting.tools", "maverick.backtesting.tools_ml", "maverick.backtesting.tools_support"]
+forbidden_modules = ["maverick.screening", "maverick.portfolio"]
+
+[[tool.importlinter.contracts]]
+name = "Research layers are forward-only"
+type = "layers"
+layers = [
+    "maverick.research.tools",
+    "maverick.research.service : maverick.research.service_support",
+    "maverick.research.agents | maverick.research.providers",
+    "maverick.research.config",
+    "maverick.research.types",
+]
+
+[[tool.importlinter.contracts]]
+name = "The research core never imports domains"
+type = "forbidden"
+source_modules = ["maverick.research.agents", "maverick.research.providers", "maverick.research.config", "maverick.research.types"]
+forbidden_modules = ["maverick.market_data", "maverick.screening", "maverick.portfolio", "maverick.technical", "maverick.backtesting"]
+
+[[tool.importlinter.contracts]]
+name = "Research service and tools never import other domains"
+type = "forbidden"
+source_modules = ["maverick.research.service", "maverick.research.service_support", "maverick.research.tools"]
+forbidden_modules = ["maverick.screening", "maverick.portfolio", "maverick.technical", "maverick.backtesting"]

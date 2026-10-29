@@ -1,0 +1,32 @@
+{
+  "budget": {
+    "authorized": false,
+    "currency": null,
+    "limit": null,
+    "max_calls": 0,
+    "max_tokens": 0,
+    "pricing_verified": false
+  },
+  "isolation": {
+    "mode": "tools-disabled",
+    "os_sandbox_verified": false,
+    "tools_disabled_verified": false
+  },
+  "student": {
+    "effective_reasoning_verified": false,
+    "reasoning": "high",
+    "selected_label": "antigravity/gemini-3.8-flash-high",
+    "upstream_identity": "UNKNOWN"
+  },
+  "teacher": {
+    "advertised_id": null,
+    "routing_identity_verified": false,
+    "selected_label": "omniroute/gpt-6.1-sol-high",
+    "upstream_identity": "UNKNOWN"
+  },
+  "transport": {
+    "card_verified": false,
+    "endpoint": "http://127.0.0.1:9900/",
+    "fixture": false
+  }
+}

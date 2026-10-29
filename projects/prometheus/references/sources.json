@@ -1,0 +1,72 @@
+{
+  "logic": {
+    "id": "logic",
+    "url": "https://lean-lang.org/theorem_proving_in_lean4/Propositions-and-Proofs/",
+    "locator": "3.1 Propositions as Types / modus ponens",
+    "text": "From a proof of `Implies p q` and a proof of `p`, we obtain a proof of `q`.",
+    "excerpt_sha256": "4e0d7c50952003efd9c0c460145c4d3e64f9408786c17d6bf9f4584dd6d0b284"
+  },
+  "provenance": {
+    "id": "provenance",
+    "url": "https://www.w3.org/TR/2013/REC-prov-dm-20130430/",
+    "locator": "Abstract",
+    "text": "PROV-DM is a core data model for provenance for building representations of the entities, people and processes involved in producing a piece of data or thing in the world.",
+    "excerpt_sha256": "91c91de0286055fc8949c74ee5e66ab24a69bc3e8a13a5dad5bffeb0f3e1a2d0"
+  },
+  "rational": {
+    "id": "rational",
+    "url": "https://docs.python.org/3/library/fractions.html",
+    "locator": "module-fractions / opening paragraph",
+    "text": "The `fractions` module provides support for rational number arithmetic.",
+    "excerpt_sha256": "c4e381c570aaccca0b222f155ccb125fe23b44a3dd197c4717f305bbef72f91a"
+  },
+  "statistics": {
+    "id": "statistics",
+    "url": "https://docs.python.org/3/library/statistics.html",
+    "locator": "statistics.mean",
+    "text": "The arithmetic mean is the sum of the data divided by the number of data points.",
+    "excerpt_sha256": "e6aa64d6731f9da5c5f8913b58291f08c28cae8a88c58f491d1ac148b5689f31"
+  },
+  "statements": {
+    "id": "statements",
+    "url": "https://fiscal.treasury.gov/system/files/2026-03/executive-summary-2025.pdf",
+    "locator": "PDF page 3 / Where We Are Now",
+    "text": "The government’s accrual-based net position, (the difference between its assets and liabilities), and its “bottom line” net operating cost (the difference between its revenues and costs) are also key financial indicators.",
+    "excerpt_sha256": "c7eb02de2d178c3aec887c88dcc80704cbddf86f67efc62590117547498ea1ee"
+  },
+  "bills": {
+    "id": "bills",
+    "url": "https://www.treasurydirect.gov/marketable-securities/treasury-bills/",
+    "locator": "Treasury Bills / opening",
+    "text": "Bills are sold at a discount or at par (face value). When the bill matures, you are paid its face value.",
+    "excerpt_sha256": "4fc516ef874ee19fa8896a926ac13d8897efb04b90bb2f7f855c36858b122370"
+  },
+  "debugger": {
+    "id": "debugger",
+    "url": "https://docs.python.org/3/library/pdb.html",
+    "locator": "module-pdb / opening",
+    "text": "It also supports post-mortem debugging and can be called under program control.",
+    "excerpt_sha256": "2f59593791021be4ab656e042197ab92e5e63c0101d06bbca8d7889fd1d56c99"
+  },
+  "json": {
+    "id": "json",
+    "url": "https://www.rfc-editor.org/rfc/rfc8259",
+    "locator": "section 4 / Objects",
+    "text": "The names within an object SHOULD be unique.",
+    "excerpt_sha256": "7081c92b764d57657acb9b8f750d18ee05eaae0bd5d7af68e7129de4fb45e623"
+  },
+  "injection": {
+    "id": "injection",
+    "url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+    "locator": "Prevention and Mitigation / 6. Segregate and identify external content",
+    "text": "Separate and clearly denote untrusted content to limit its influence on user prompts.",
+    "excerpt_sha256": "4b77d0ca8773e73b5509027998b102ddc13d18200330816e36c166f0f1187bc0"
+  },
+  "brier": {
+    "id": "brier",
+    "url": "https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html",
+    "locator": "brier_score_loss / opening",
+    "text": "The Brier score measures the mean squared difference between the predicted probability and the actual outcome.",
+    "excerpt_sha256": "c3fee6cc8d4de410f3a5fe4748151b4c370b528dab2b4e622b2c689bc4687593"
+  }
+}

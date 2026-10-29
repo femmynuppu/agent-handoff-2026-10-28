@@ -1,0 +1,80 @@
+{
+  "catalog_version": "quest-benchmark-catalog-v1",
+  "implemented_module": "quest-financial-foundations-v1",
+  "benchmark_version": "quest-foundations-reference-v1",
+  "status": "PARTIAL_IMPLEMENTED_REFERENCE_SUITE",
+  "training_performed": false,
+  "model_weights_updated": false,
+  "improvement_demonstrated": false,
+  "verified_mastery": false,
+  "freeze_protocol": {
+    "case_ids": ["FND-001", "FND-002", "FND-003", "FND-004", "FND-005", "FND-006", "FND-007", "FND-008", "FND-009", "FND-010", "FND-011", "FND-012", "FND-013", "FND-014", "FND-015", "FND-016", "FND-017", "FND-018", "FND-019", "FND-020", "FND-021"],
+    "case_source": "src/siqe_quest/learning.py::_CASES",
+    "answer_key": "Literal hand-derived answers, independent of reference_answer formulas and practice exercises",
+    "manifest_record": "benchmark_manifest/quest-foundations-reference-v1",
+    "hash_algorithm": "SHA-256 over core canonical_json of version, exact cases including answers, tolerance and practice_ids",
+    "manifest_hash": null,
+    "manifest_hash_status": "Computed and frozen in immutable Store record on first actual evaluation; not inventing an unevaluated run hash",
+    "mutation_rule": "Changing any fixture requires a new benchmark version; Store conflicts fail closed otherwise",
+    "exposure_record_kind": "benchmark_exposure",
+    "exposure_timing": "Persist before execution, including interrupted runs",
+    "public_source_exposure": true,
+    "unseen_to_model": false,
+    "repeat_evaluation_is_unseen_evidence": false
+  },
+  "curriculum_topics": {
+    "mathematics": ["Algebra", "Calculus", "Linear algebra", "Probability", "Statistical inference", "Optimization", "Numerical analysis", "Stochastic processes", "Time-series mathematics", "Convex optimization", "Bayesian statistics", "Monte Carlo methods", "Information theory", "Applied econometrics", "Stochastic differential equations"],
+    "economics": ["Microeconomics", "Macroeconomics", "Monetary policy", "International economics", "Inflation", "Interest rates", "Bond markets", "Exchange rates", "Business cycles", "Fiscal policy", "Economic shocks", "Financial crises", "Capital flows", "Global trade"],
+    "finance": ["Financial accounting", "Corporate finance", "Equity valuation", "Fixed-income valuation", "Derivatives", "Portfolio theory", "Risk management", "Behavioral finance", "Market microstructure", "Asset pricing", "Factor investing", "Event-driven research", "Corporate actions", "Capital markets regulation"],
+    "quantitative_research": ["Technical indicators", "Trend following", "Mean reversion", "Momentum", "Volatility", "Statistical arbitrage", "Cross-sectional factors", "Time-series forecasting", "Regime detection", "Portfolio optimization", "Risk parity", "Liquidity factors", "Volatility targeting", "Options Greeks", "Tail-risk modeling", "Transaction cost analysis", "Execution simulation", "Machine learning for financial time series"]
+  },
+  "topic_coverage_rule": "All listed topics are catalog-only except partial introductory coverage of Probability, Exchange rates, Financial accounting, Transaction cost analysis, Execution simulation and Applied econometrics. No topic has verified mastery by inclusion.",
+  "domains": {
+    "financial_knowledge": [
+      {"name": "Financial statement interpretation", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-011"], "limitation": "Balance-sheet identity only, not full statement interpretation"},
+      {"name": "Asset valuation", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Economic reasoning", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-012"], "limitation": "Observational association versus causal identification only"},
+      {"name": "Market rules", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Derivative mechanics", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Risk measurement", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Corporate actions", "status": "CATALOG_ONLY", "case_ids": []}
+    ],
+    "mathematical": [
+      {"name": "Probability", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-004", "FND-005"]},
+      {"name": "Statistics", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-006"]},
+      {"name": "Numerical optimization", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Linear algebra", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Time-series inference", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Financial calculations", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-001", "FND-002", "FND-003", "FND-007", "FND-008", "FND-009"]}
+    ],
+    "tool_use": [
+      {"name": "Data-source selection", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Source verification", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Error handling", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-017"]},
+      {"name": "Provenance preservation", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Timestamp interpretation", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-013", "FND-014", "FND-020"]},
+      {"name": "Dataset normalization", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-018", "FND-019"]}
+    ],
+    "strategy_engineering": [
+      {"name": "Indicator numerical correctness", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "No-repaint behavior", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-015", "FND-016"], "limitation": "Planted future-feature and same-observation fills rejected; does not prove platform repaint semantics"},
+      {"name": "Backtest parity", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Trading cost handling", "status": "PARTIAL_IMPLEMENTED", "case_ids": ["FND-010", "FND-021"]},
+      {"name": "Risk management", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Pine v6 syntax compatibility", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Conditional strategy logic", "status": "CATALOG_ONLY", "case_ids": []}
+    ],
+    "autonomous_learning": [
+      {"name": "Cross-session continuity", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Knowledge retrieval", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Lesson retention", "status": "EVIDENCE_GATE_ONLY_UNMEASURED", "case_ids": []},
+      {"name": "Contradiction detection", "status": "CATALOG_ONLY", "case_ids": []},
+      {"name": "Unseen problem solving", "status": "EVIDENCE_GATE_ONLY_UNMEASURED", "case_ids": []},
+      {"name": "Negative-transfer detection", "status": "PUBLIC_REGRESSION_GATE_ONLY", "case_ids": [], "limitation": "Paired case regressions can be detected, but no actual new skill transfer is asserted"},
+      {"name": "Token efficiency", "status": "CATALOG_ONLY", "case_ids": []}
+    ]
+  },
+  "measurement_rule": "Only executed case outputs become measured. Catalog inclusion, infrastructure, source reading and passing unit tests never imply scientific coverage, training or mastery.",
+  "scorecard": {"A": "Source discovery precision", "B": "Source verification accuracy", "C": "Relevant knowledge retrieval", "D": "Mathematical correctness", "E": "Financial reasoning correctness", "F": "Tool routing effectiveness", "G": "Backtest reproducibility", "H": "False strategy approval rate", "I": "Strategy robustness", "J": "Forecast calibration", "K": "TradingView/Python parity", "L": "New skill transfer performance", "M": "Operational reliability", "N": "Cost per verified research result", "O": "Regression rate", "P": "Performance on unseen tasks"},
+  "scorecard_rule": "All values null until actually measured. D/E may report narrowly scoped public reference-case correctness; all other dimensions remain null in Curriculum.evaluate. No aggregate intelligence percentage."
+}

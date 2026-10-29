@@ -1,0 +1,33 @@
+{
+  "workspace_id": "SIQE_QUEST",
+  "live_trading": false,
+  "fine_tuning": false,
+  "public_http_listener": false,
+  "bind_host": "127.0.0.1",
+  "allowed_domains": ["www.bankofcanada.ca", "www.tradingview.com"],
+  "max_queue": 128,
+  "max_depth": 3,
+  "task_budget": 8,
+  "max_attempts": 3,
+  "memory_mb": 256,
+  "cpu_seconds": 120,
+  "max_tasks_per_cycle": 8,
+  "max_network_requests_per_cycle": 4,
+  "review_interval_seconds": 21600,
+  "max_log_bytes": 1048576,
+  "network_timeout_seconds": 20,
+  "max_response_bytes": 4194304,
+  "idle_seconds": 2,
+  "dataset": {
+    "provider": "Bank of Canada Valet",
+    "series": "FXUSDCAD",
+    "start_date": "2023-01-01",
+    "end_date": "2025-12-31",
+    "timezone": "America/Toronto",
+    "units": "CAD per USD",
+    "source_url": "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?start_date=2023-01-01&end_date=2025-12-31",
+    "docs_url": "https://www.bankofcanada.ca/valet/docs",
+    "terms_url": "https://www.bankofcanada.ca/terms/",
+    "robots_url": "https://www.bankofcanada.ca/robots.txt"
+  }
+}

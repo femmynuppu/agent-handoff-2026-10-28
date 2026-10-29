@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "siqe-quest"
+version = "0.1.0"
+description = "Evidence-grounded, research-only quantitative intelligence laboratory"
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["research", "quantitative-finance", "provenance", "sqlite"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+[project.scripts]
+siqe-quest = "siqe_quest.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["siqe_quest*"]
+
+# Tests use the standard-library discovery command:
+# python -m unittest discover -s tests -v

@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "domains": [
+    "epistemology",
+    "research",
+    "math",
+    "statistics",
+    "financial_statements",
+    "quant_finance",
+    "software_debugging",
+    "tool_workflows",
+    "adversarial_reasoning",
+    "uncertainty_decision_theory"
+  ],
+  "nodes": [
+    {
+      "id": "L01",
+      "domain": "epistemology",
+      "prerequisites": []
+    },
+    {
+      "id": "L02",
+      "domain": "research",
+      "prerequisites": [
+        "L01"
+      ]
+    },
+    {
+      "id": "L03",
+      "domain": "math",
+      "prerequisites": []
+    },
+    {
+      "id": "L04",
+      "domain": "statistics",
+      "prerequisites": [
+        "L03",
+        "L01"
+      ]
+    },
+    {
+      "id": "L05",
+      "domain": "financial_statements",
+      "prerequisites": [
+        "L02",
+        "L03"
+      ]
+    },
+    {
+      "id": "L06",
+      "domain": "quant_finance",
+      "prerequisites": [
+        "L05",
+        "L04"
+      ]
+    },
+    {
+      "id": "L07",
+      "domain": "software_debugging",
+      "prerequisites": [
+        "L01"
+      ]
+    },
+    {
+      "id": "L08",
+      "domain": "tool_workflows",
+      "prerequisites": [
+        "L07",
+        "L02"
+      ]
+    },
+    {
+      "id": "L09",
+      "domain": "adversarial_reasoning",
+      "prerequisites": [
+        "L01",
+        "L08"
+      ]
+    },
+    {
+      "id": "L10",
+      "domain": "uncertainty_decision_theory",
+      "prerequisites": [
+        "L04",
+        "L01"
+      ]
+    }
+  ],
+  "advancement": "All prerequisites require independently reviewed evidence; deterministic pass alone is not mastery.",
+  "exposed_prior_cases": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H"
+  ],
+  "holdout_policy": "Prior pilot eight cases are exposed and excluded. New H tasks are teacher-authored small-sample candidates, not an independent blind benchmark. Store outside student mounts before actual use; no OS isolation by directory."
+}

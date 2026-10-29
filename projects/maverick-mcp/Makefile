@@ -1,0 +1,193 @@
+# Maverick-MCP Makefile
+# Central command interface for agent-friendly development
+
+.PHONY: help dev dev-stdio stop test test-all test-watch test-specific test-parallel test-cov lint format typecheck docs-check eval-agent-install eval-agent-case eval-review clean check setup redis-start redis-stop docker-up docker-down docker-logs
+
+# Default target
+help:
+	@echo "Maverick-MCP Development Commands:"
+	@echo ""
+	@echo "  make dev          - Start development environment (Streamable-HTTP transport, default)"
+	@echo "  make dev-stdio    - Start with STDIO transport (recommended for Claude Desktop)"
+	@echo "  make stop         - Stop all services"
+	@echo ""
+	@echo "  make test         - Run unit tests (fast)"
+	@echo "  make test-all     - Run all tests including integration"
+	@echo "  make test-watch   - Auto-run tests on file changes"
+	@echo "  make test-specific TEST=name - Run specific test"
+	@echo "  make test-parallel - Run tests in parallel"
+	@echo "  make test-cov     - Run tests with coverage report"
+	@echo ""
+	@echo "  make lint         - Run code quality checks"
+	@echo "  make format       - Auto-format code"
+	@echo "  make typecheck    - Run type checking"
+	@echo "  make docs-check   - Validate documentation catalog and links"
+	@echo "  make check        - Run all checks (lint + type check)"
+	@echo "  make eval-agent-install - Install the in-session eval client subagent"
+	@echo "  make eval-agent-case CASES=<file> CASE=<id> - Point the next eval subagent at a case"
+	@echo "  make eval-review  - Review the newest trace run in a local browser UI (port 8765)"
+	@echo ""
+	@echo "  make clean        - Clean up generated files"
+	@echo ""
+	@echo "  make docker-up    - Start with Docker"
+	@echo "  make docker-down  - Stop Docker services"
+	@echo "  make docker-logs  - View Docker logs"
+
+# Development commands
+dev:
+	@echo "Starting Maverick-MCP development environment (Streamable-HTTP transport)..."
+	@uv run python -m maverick.server --transport http
+
+dev-stdio:
+	@echo "Starting Maverick-MCP development environment (STDIO transport)..."
+	@uv run python -m maverick.server --transport stdio
+
+stop:
+	@echo "Stopping all services..."
+	@pkill -f "maverick.server" || true
+	@echo "All services stopped."
+
+# Testing commands
+test:
+	@echo "Running unit tests..."
+	@uv run pytest -v
+
+test-all:
+	@echo "Running all tests (including integration)..."
+	@uv run pytest -v -m ""
+
+test-watch:
+	@echo "Starting test watcher..."
+	@if ! uv pip show pytest-watch > /dev/null 2>&1; then \
+		echo "Installing pytest-watch..."; \
+		uv pip install pytest-watch; \
+	fi
+	@uv run ptw -- -v
+
+test-specific:
+	@if [ -z "$(TEST)" ]; then \
+		echo "Usage: make test-specific TEST=test_name"; \
+		exit 1; \
+	fi
+	@echo "Running specific test: $(TEST)"
+	@uv run pytest -v -k "$(TEST)"
+
+test-parallel:
+	@echo "Running tests in parallel..."
+	@if ! uv pip show pytest-xdist > /dev/null 2>&1; then \
+		echo "Installing pytest-xdist..."; \
+		uv pip install pytest-xdist; \
+	fi
+	@uv run pytest -v -n auto
+
+test-cov:
+	@echo "Running tests with coverage..."
+	@uv run pytest --cov=maverick --cov-report=html --cov-report=term
+
+# Code quality commands
+lint:
+	@echo "Running linter..."
+	@uv run --extra dev ruff check .
+	@uv run --extra dev ruff format --check .
+	@uv run lint-imports
+
+format:
+	@echo "Formatting code..."
+	@uv run --extra dev ruff format .
+	@uv run --extra dev ruff check . --fix
+
+# ty resolves imports on every code path, so the optional-extra domains
+# (maverick/backtesting, maverick/research) need their packages present even
+# though they lazy-import at runtime. Same checker, scope, and extras as the
+# CI typecheck job.
+typecheck:
+	@echo "Running type checker..."
+	@uv run --extra dev --extra backtesting --extra research ty check maverick tests evals
+
+docs-check:
+	@echo "Checking documentation catalog..."
+	@uv run python tools/check_docs_catalog.py
+
+check: lint typecheck
+	@echo "All checks passed!"
+
+# Tool-surface traces for error analysis, recorded by an in-session subagent:
+# install the eval client agent, then point it at one case before each spawn.
+# See evals/tool_surface/README.md.
+eval-agent-install:
+	@mkdir -p .claude/agents
+	@sed "s|{REPO}|$(CURDIR)|g" evals/tool_surface/agent/maverick-eval-client.md > .claude/agents/maverick-eval-client.md
+	@echo "Installed .claude/agents/maverick-eval-client.md (restart Claude Code to load it)"
+
+eval-agent-case:
+	@uv run python -c "import json,sys; cases={c['id']:c for c in json.load(open('$(CASES)'))}; json.dump(cases['$(CASE)'], open('evals/tool_surface/.agent_case.json','w'))"
+	@echo "Next maverick-eval-client spawn runs case $(CASE) from $(CASES)"
+
+# Local review UI for error analysis on the newest run (override EVAL_RUN).
+# Run folders start with a UTC timestamp, so the last one sorted is the newest.
+EVAL_RUN ?= $(lastword $(sort $(dir $(wildcard evals/tool_surface/runs/*/traces))))
+eval-review:
+	@test -n "$(EVAL_RUN)" || { echo "No trace runs under evals/tool_surface/runs"; exit 1; }
+	@uv run python evals/review/server.py --run $(EVAL_RUN) $(ARGS)
+
+# Utility commands
+setup:
+	@echo "Setting up Maverick-MCP..."
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "Created .env file - please update with your configuration"; \
+	fi
+	@uv sync
+	@echo "Setup complete! Run 'make dev' to start development."
+
+clean:
+	@echo "Cleaning up..."
+	@rm -rf .pytest_cache
+	@rm -rf htmlcov
+	@rm -rf .coverage
+	@rm -rf .ruff_cache
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete
+	@echo "Cleanup complete."
+
+# Service management
+redis-start:
+	@echo "Starting Redis..."
+	@if command -v brew &> /dev/null; then \
+		brew services start redis; \
+	else \
+		redis-server --daemonize yes; \
+	fi
+
+redis-stop:
+	@echo "Stopping Redis..."
+	@if command -v brew &> /dev/null; then \
+		brew services stop redis; \
+	else \
+		pkill redis-server || true; \
+	fi
+
+# Quick shortcuts
+d: dev
+ds: dev-stdio
+t: test
+l: lint
+c: check
+
+# Docker commands
+docker-up:
+	@echo "Starting Docker services..."
+	@docker-compose up --build -d
+
+docker-down:
+	@echo "Stopping Docker services..."
+	@docker-compose down
+
+docker-logs:
+	@echo "Following Docker logs (Ctrl+C to stop)..."
+	@docker-compose logs -f
+
+# Build the Claude Desktop .mcpb bundle (see scripts/build_mcpb.py).
+# Validate before release-attach: npx @anthropic-ai/mcpb validate dist/manifest.json
+bundle:
+	uv run python scripts/build_mcpb.py

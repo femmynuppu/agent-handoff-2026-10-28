@@ -1,0 +1,206 @@
+"""Trade-journal MCP tool functions, split out of `tools.py` purely to stay
+under the package's 500-line-per-file cap
+(`tests/structure/test_harness_rules.py`) -- `tools.py` was already close to
+the cap before these five tools existed. Same layer as `tools.py` in the
+layers contract (`tools : tools_journal`, colon-joined siblings, mirrors
+`backtesting.tools : backtesting.tools_ml : backtesting.tools_support`).
+
+Owns its own `_journal_service` global and `configure`/`_require_journal_
+service` pair rather than sharing `tools.py`'s: `JournalService` is a
+standalone domain service unrelated to `PortfolioService` (see
+`service_journal.py`'s module docstring for why it isn't composed inside
+`PortfolioService`), so there is no shared state to thread through, and
+keeping it here avoids a circular import (`tools.py` imports the five tool
+functions from this module; this module needs nothing back from
+`tools.py`). `tools.py`'s own `configure()` forwards its optional
+`journal_service` argument to `configure()` here.
+"""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+from maverick.portfolio.service_journal import JournalService
+from maverick.portfolio.types import JournalEntryPayload
+
+_journal_service: JournalService | None = None
+
+
+def configure(journal_service: JournalService | None) -> None:
+    global _journal_service
+    _journal_service = journal_service
+
+
+def _require_journal_service() -> JournalService:
+    if _journal_service is None:
+        raise RuntimeError(
+            "portfolio.tools: configure(service, journal_service) was not "
+            "called with a journal_service"
+        )
+    return _journal_service
+
+
+def _trade_payload(entry: JournalEntryPayload) -> dict[str, Any]:
+    """Dump a journal entry for a tool result. The result's `status` is the
+    call's success flag, so the trade's own open/closed status moves to
+    `trade_status` instead of being overwritten."""
+    payload = entry.model_dump(mode="json")
+    payload["trade_status"] = payload["status"]
+    payload["status"] = "success"
+    return payload
+
+
+async def portfolio_journal_add_trade(
+    symbol: str,
+    side: str,
+    entry_price: float,
+    shares: float,
+    rationale: str | None = None,
+    tags: list[str] | None = None,
+    notes: str | None = None,
+    entry_date: str | None = None,
+) -> dict[str, Any]:
+    """Add an open trade to the journal. `entry_date` is an ISO 8601 date or
+    datetime (for example `2026-03-15` or `2026-03-15T14:30:00Z`) for a trade
+    made earlier; omit it to record the trade as entered now. Naive dates
+    are UTC. Side is long or short (case-insensitive); prices and shares
+    must be finite and positive. Unit prices retain subcent precision."""
+    if entry_date is not None:
+        try:
+            datetime.fromisoformat(entry_date)
+        except ValueError:
+            return {
+                "status": "error",
+                "error": (
+                    "entry_date must be an ISO 8601 date or datetime, for "
+                    f"example 2026-03-15 or 2026-03-15T14:30:00Z; got {entry_date!r}"
+                ),
+            }
+    try:
+        journal_service = _require_journal_service()
+        entry = await journal_service.add_trade(
+            symbol=symbol,
+            side=side,
+            entry_price=Decimal(str(entry_price)),
+            shares=Decimal(str(shares)),
+            entry_date=entry_date,
+            rationale=rationale,
+            tags=tags,
+            notes=notes,
+        )
+        return _trade_payload(entry)
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+async def portfolio_journal_close_trade(
+    entry_id: int,
+    exit_price: float,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Close an open trade by entry ID. PnL is computed automatically
+    (long: exit-entry, short: entry-exit), multiplied by shares, then
+    rounded to cents with ROUND_HALF_UP. Exit price must be finite and
+    positive. Strategy performance is recomputed for every trade tag."""
+    try:
+        journal_service = _require_journal_service()
+        entry = await journal_service.close_trade(
+            entry_id=entry_id,
+            exit_price=Decimal(str(exit_price)),
+            notes=notes,
+        )
+        return _trade_payload(entry)
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+async def portfolio_journal_list_trades(
+    symbol: str | None = None,
+    status: str | None = None,
+    strategy_tag: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """List journal trades, optionally filtered by symbol, status
+    (open/closed), or strategy tag. Newest entry date first."""
+    try:
+        journal_service = _require_journal_service()
+        entries = await journal_service.list_trades(
+            symbol=symbol, status=status, strategy_tag=strategy_tag, limit=limit
+        )
+        return {
+            "status": "success",
+            "trades": [entry.model_dump(mode="json") for entry in entries],
+            "count": len(entries),
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+async def portfolio_journal_review(entry_id: int) -> dict[str, Any]:
+    """Full detail for a single trade by ID, including the side-aware
+    `pnl_pct` (only populated once the trade is closed). The trade's
+    open/closed state is `trade_status`; `status` is the call's result."""
+    try:
+        journal_service = _require_journal_service()
+        review = await journal_service.review_trade(entry_id)
+        if review is None:
+            return {"status": "success", "found": False, "entry_id": entry_id}
+        payload = _trade_payload(review)
+        payload["found"] = True
+        return payload
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+async def portfolio_get_strategy_performance(
+    strategy_tag: str | None = None,
+    compare: bool = False,
+) -> dict[str, Any]:
+    """Strategy performance analytics. `compare=False` (default) returns
+    win/loss/expectancy/profit-factor for a single `strategy_tag`
+    (required). `compare=True` returns every strategy ranked by expectancy
+    descending, absorbing legacy's separate `get_strategy_comparison` tool
+    into this one via the flag -- `strategy_tag` is ignored in that mode."""
+    try:
+        journal_service = _require_journal_service()
+        if compare:
+            strategies = await journal_service.compare_strategies()
+            return {
+                "status": "success",
+                "mode": "comparison",
+                "strategies": [
+                    {
+                        "rank": i + 1,
+                        "total_trades": s.win_count + s.loss_count,
+                        **s.model_dump(mode="json"),
+                    }
+                    for i, s in enumerate(strategies)
+                ],
+                "count": len(strategies),
+            }
+
+        if not strategy_tag:
+            return {
+                "status": "error",
+                "error": "strategy_tag is required when compare is False",
+            }
+
+        perf = await journal_service.get_strategy_performance(strategy_tag)
+        if perf is None:
+            return {
+                "status": "success",
+                "mode": "single",
+                "found": False,
+                "strategy_tag": strategy_tag,
+                "message": (
+                    "No performance data found. Close some trades with this tag first."
+                ),
+            }
+        payload = perf.model_dump(mode="json")
+        payload["total_trades"] = perf.win_count + perf.loss_count
+        payload["status"] = "success"
+        payload["mode"] = "single"
+        payload["found"] = True
+        return payload
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}

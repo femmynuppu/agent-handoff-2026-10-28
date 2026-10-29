@@ -1,0 +1,36 @@
+# Credentials, key material, and host-local runtime data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.p8
+*.sqlite
+*.sqlite3
+*.sqlite*
+*.db
+*.db-*
+*.log
+*.pid
+*.pid.*
+!*.lock
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+node_modules/
+
+# Build and cache output
+MODULE.bazel.lock
+bazel-*
+.cache/
+node_modules/
+
+# Local state and unrelated app data
+state/
+evidence/
+memory/
+recovery/

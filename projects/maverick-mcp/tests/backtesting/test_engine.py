@@ -1,0 +1,416 @@
+"""Characterization tests for `maverick.backtesting.engine`.
+
+`pytest.importorskip("vectorbt")` guards this whole module: vectorbt is
+only installed under the `backtesting` extra, so these tests are skipped
+(not failed) when it's absent. The OHLCV fixture is a deterministic,
+seeded synthetic series (no network) following the same shape as
+`tests/test_ml_strategies.py`'s `sample_market_data` fixture, but built
+from a seeded `np.random.default_rng` instead of the legacy global
+`np.random.seed`, so it never depends on -- or mutates -- interpreter-wide
+random state.
+
+`sma_cross` signal generation is hardcoded here (`_sma_cross_signals`)
+rather than imported from `maverick.backtesting.strategies.templates`,
+which remains a docstring-only stub reserved for Task 5 -- see
+`engine.py`'s module docstring for why the engine itself never imports
+strategy template code.
+
+Numeric assertions below are *pinned*: they were recorded by actually
+running this code against the fixture below (not derived independently),
+per the task's characterization-testing brief. A change to this module's
+math should change these numbers and fail the test; that is the point.
+"""
+
+import json
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import pytest
+
+pytest.importorskip("vectorbt")
+
+import vectorbt as vbt
+
+from maverick.backtesting.config import BacktestingSettings
+from maverick.backtesting.engine import optimize_parameters, run_backtest
+from maverick.backtesting.types import BacktestResult, OptimizationResult
+
+
+def _sma_cross_signals(
+    frame: pd.DataFrame, params: dict
+) -> tuple[pd.Series, pd.Series]:
+    """Minimal, self-contained port of the sma-crossover branch of legacy
+    `VectorBTEngine._sma_crossover_signals` -- just enough to characterize
+    `run_backtest`/`optimize_parameters` without depending on
+    `strategies/templates.py` (Task 5)."""
+    close = frame["close"]
+    # vectorbt builds its indicator classes at runtime, so `run()` has no
+    # useful static type (same annotation as `strategies/signals.py`).
+    fast_ma: Any = vbt.MA.run(close, params.get("fast_period", 10), short_name="fast")
+    slow_ma: Any = vbt.MA.run(close, params.get("slow_period", 20), short_name="slow")
+    fast = fast_ma.ma.squeeze()
+    slow = slow_ma.ma.squeeze()
+    entries = (fast > slow) & (fast.shift(1) <= slow.shift(1))
+    exits = (fast < slow) & (fast.shift(1) >= slow.shift(1))
+    return entries.fillna(False), exits.fillna(False)
+
+
+@pytest.fixture
+def ohlcv_frame() -> pd.DataFrame:
+    """300 rows of deterministic synthetic daily OHLCV data, seed 42."""
+    rng = np.random.default_rng(42)
+    dates = pd.date_range("2023-01-01", periods=300, freq="D")
+    returns = rng.normal(0.0005, 0.02, len(dates))
+    prices = 100 * np.cumprod(1 + returns)
+    volumes = rng.integers(1_000_000, 5_000_000, len(dates))
+    frame = pd.DataFrame(
+        {
+            "open": prices * rng.uniform(0.98, 1.02, len(dates)),
+            "high": prices * rng.uniform(1.00, 1.05, len(dates)),
+            "low": prices * rng.uniform(0.95, 1.00, len(dates)),
+            "close": prices,
+            "volume": volumes,
+        },
+        index=dates,
+    )
+    frame["high"] = np.maximum(frame["high"], np.maximum(frame["open"], frame["close"]))
+    frame["low"] = np.minimum(frame["low"], np.minimum(frame["open"], frame["close"]))
+    return frame
+
+
+# -- run_backtest -------------------------------------------------------
+
+
+def test_sma_cross_end_to_end_pins_metrics(ohlcv_frame):
+    entries, exits = _sma_cross_signals(
+        ohlcv_frame, {"fast_period": 10, "slow_period": 20}
+    )
+
+    result = run_backtest(
+        ohlcv_frame,
+        entries,
+        exits,
+        symbol="TEST",
+        strategy="sma_cross",
+        parameters={"fast_period": 10, "slow_period": 20},
+        settings=BacktestingSettings(),
+    )
+
+    assert isinstance(result, BacktestResult)
+    assert result.symbol == "TEST"
+    assert result.strategy == "sma_cross"
+    assert result.parameters == {"fast_period": 10, "slow_period": 20}
+    assert result.initial_capital == 10000.0
+    assert result.start_date == "2023-01-01"
+    assert result.end_date == "2023-10-27"
+
+    metrics = result.metrics
+    assert metrics.total_trades == 8
+    assert metrics.winning_trades == 2
+    assert metrics.losing_trades == 6
+    assert metrics.total_return == pytest.approx(-0.1939859295537608, rel=1e-6)
+    assert metrics.sharpe_ratio == pytest.approx(
+        -1.1935470172889275 * np.sqrt(252 / 365), rel=1e-6
+    )
+    assert metrics.sortino_ratio == pytest.approx(
+        -1.6432226726027797 * np.sqrt(252 / 365), rel=1e-6
+    )
+    assert metrics.max_drawdown == pytest.approx(-0.25587123351061325, rel=1e-6)
+    assert metrics.win_rate == pytest.approx(0.25, rel=1e-6)
+    assert metrics.profit_factor == pytest.approx(0.16752545611905578, rel=1e-6)
+    assert metrics.kelly_criterion == pytest.approx(-1.0, rel=1e-6)
+    assert metrics.avg_duration == pytest.approx(11.5, rel=1e-6)
+
+
+def test_sma_cross_first_trade_pinned(ohlcv_frame):
+    entries, exits = _sma_cross_signals(
+        ohlcv_frame, {"fast_period": 10, "slow_period": 20}
+    )
+    result = run_backtest(ohlcv_frame, entries, exits, settings=BacktestingSettings())
+
+    first = result.trades[0]
+    assert first.entry_date == "2023-03-13 00:00:00"
+    assert first.exit_date == "2023-03-17 00:00:00"
+    assert first.entry_price == pytest.approx(106.17708541870115, rel=1e-6)
+    assert first.exit_price == pytest.approx(107.01805792236328, rel=1e-6)
+    assert first.pnl == pytest.approx(59.06643675872606, rel=1e-6)
+    assert first.return_ == pytest.approx(0.005912550319548479, rel=1e-6)
+    assert first.duration == "4 days 00:00:00"
+
+
+def test_run_backtest_rejects_empty_frame():
+    empty = pd.DataFrame(columns=["close"])
+    with pytest.raises(ValueError, match="non-empty"):
+        run_backtest(empty, pd.Series(dtype=bool), pd.Series(dtype=bool))
+
+
+def test_run_backtest_rejects_too_short_frame():
+    dates = pd.date_range("2023-01-01", periods=1, freq="D")
+    frame = pd.DataFrame({"close": [100.0]}, index=dates)
+    entries = pd.Series([False], index=dates)
+    exits = pd.Series([False], index=dates)
+    with pytest.raises(ValueError, match="at least"):
+        run_backtest(frame, entries, exits)
+
+
+def test_run_backtest_rejects_missing_close_column(ohlcv_frame):
+    frame = ohlcv_frame.drop(columns=["close"])
+    entries = pd.Series(False, index=frame.index)
+    exits = pd.Series(False, index=frame.index)
+    with pytest.raises(ValueError, match="close"):
+        run_backtest(frame, entries, exits)
+
+
+def test_run_backtest_rejects_mismatched_signal_length(ohlcv_frame):
+    entries = pd.Series(False, index=ohlcv_frame.index[:-1])
+    exits = pd.Series(False, index=ohlcv_frame.index)
+    with pytest.raises(ValueError, match="length"):
+        run_backtest(ohlcv_frame, entries, exits)
+
+
+# -- optimize_parameters --------------------------------------------------
+
+
+def test_optimize_parameters_pins_best_result(ohlcv_frame):
+    result = optimize_parameters(
+        ohlcv_frame,
+        _sma_cross_signals,
+        {"fast_period": [5, 10, 15], "slow_period": [20, 30]},
+        symbol="TEST",
+        strategy="sma_cross",
+        optimization_metric="sharpe_ratio",
+        top_n=3,
+        settings=BacktestingSettings(),
+    )
+
+    assert isinstance(result, OptimizationResult)
+    assert result.total_combinations_tested == 6
+    assert result.valid_combinations == 6
+    assert result.best_parameters == {"fast_period": 15, "slow_period": 20}
+    assert result.best_metric_value == pytest.approx(
+        -0.6870859573334221 * np.sqrt(252 / 365), rel=1e-6
+    )
+    assert len(result.top_results) == 3
+
+    best_row = result.top_results[0]
+    assert best_row.parameters == {"fast_period": 15, "slow_period": 20}
+    assert best_row.total_return == pytest.approx(-0.14557239794854704, rel=1e-6)
+    assert best_row.max_drawdown == pytest.approx(-0.2707973404531474, rel=1e-6)
+    assert best_row.total_trades == 12
+    # Dynamic key named after `optimization_metric`, preserved via
+    # `OptimizationResultRow`'s `extra="allow"`.
+    assert best_row.model_dump()["sharpe_ratio"] == pytest.approx(
+        -0.6870859573334221 * np.sqrt(252 / 365), rel=1e-6
+    )
+
+
+def test_optimize_parameters_no_slippage_differs_from_run_backtest(ohlcv_frame):
+    """Legacy quirk, faithfully preserved: `optimize_parameters` never
+    applies slippage, so its per-combo total_return differs from
+    `run_backtest`'s for the identical parameters/frame."""
+    entries, exits = _sma_cross_signals(
+        ohlcv_frame, {"fast_period": 10, "slow_period": 20}
+    )
+    backtest = run_backtest(ohlcv_frame, entries, exits, settings=BacktestingSettings())
+
+    result = optimize_parameters(
+        ohlcv_frame,
+        _sma_cross_signals,
+        {"fast_period": [10], "slow_period": [20]},
+        optimization_metric="total_return",
+        settings=BacktestingSettings(),
+    )
+
+    optimize_return = result.top_results[0].total_return
+    assert optimize_return != pytest.approx(backtest.metrics.total_return)
+    assert optimize_return == pytest.approx(-0.18098597781057052, rel=1e-6)
+    assert result.top_results[0].total_trades == backtest.metrics.total_trades
+
+
+def test_optimize_parameters_chunking_matches_unchunked(ohlcv_frame):
+    """Forcing the `total_combos > threshold` chunked path (via a low
+    `optimization_chunk_threshold`) must not change which combination
+    wins -- chunking only changes processing order/grouping."""
+    grid = {"fast_period": [5, 10, 15], "slow_period": [20, 30]}
+
+    unchunked = optimize_parameters(
+        ohlcv_frame, _sma_cross_signals, grid, settings=BacktestingSettings()
+    )
+    chunked = optimize_parameters(
+        ohlcv_frame,
+        _sma_cross_signals,
+        grid,
+        settings=BacktestingSettings(
+            optimization_chunk_threshold=2,
+            optimization_chunk_size_min=1,
+            optimization_chunk_size_max=2,
+        ),
+    )
+
+    assert chunked.best_parameters == unchunked.best_parameters
+    assert chunked.best_metric_value == pytest.approx(unchunked.best_metric_value)
+    assert chunked.valid_combinations == unchunked.valid_combinations
+
+
+def test_optimize_parameters_rejects_unknown_metric(ohlcv_frame):
+    with pytest.raises(ValueError, match="Unknown metric"):
+        optimize_parameters(
+            ohlcv_frame,
+            _sma_cross_signals,
+            {"fast_period": [10]},
+            optimization_metric="not_a_real_metric",
+        )
+
+
+def test_optimize_parameters_rejects_empty_grid(ohlcv_frame):
+    with pytest.raises(ValueError, match="no parameter combinations"):
+        optimize_parameters(ohlcv_frame, _sma_cross_signals, {"fast_period": []})
+
+
+def test_optimize_parameters_rejects_empty_frame():
+    empty = pd.DataFrame(columns=["close"])
+    with pytest.raises(ValueError, match="non-empty"):
+        optimize_parameters(empty, _sma_cross_signals, {"fast_period": [10]})
+
+
+def test_optimize_parameters_rejects_too_short_frame():
+    dates = pd.date_range("2023-01-01", periods=1, freq="D")
+    frame = pd.DataFrame({"close": [100.0]}, index=dates)
+    with pytest.raises(ValueError, match="at least"):
+        optimize_parameters(frame, _sma_cross_signals, {"fast_period": [10]})
+
+
+@pytest.fixture
+def annualization_frame():
+    index = pd.bdate_range("2024-01-02", periods=252)
+    path = np.linspace(100, 110, 252) + np.sin(np.arange(252))
+    path[-1] = 110
+    return pd.DataFrame({"close": path}, index=index)
+
+
+@pytest.mark.parametrize("metric", ["sharpe_ratio", "sortino_ratio"])
+def test_daily_metrics_use_252_sessions_locally(annualization_frame, metric):
+    frame = annualization_frame
+    entries = pd.Series(False, index=frame.index)
+    entries.iloc[0] = True
+    exits = pd.Series(False, index=frame.index)
+    exits.iloc[-1] = True
+    settings = BacktestingSettings(fees=0, slippage=0)
+    global_year_freq = vbt.settings["returns"]["year_freq"]
+    result = run_backtest(frame, entries, exits, settings=settings)
+    prices = frame.close.astype(np.float32).astype(float)
+    returns = prices.pct_change().fillna(0).to_numpy()
+    denominator = (
+        returns.std(ddof=1)
+        if metric == "sharpe_ratio"
+        else np.sqrt(np.mean(np.minimum(returns, 0) ** 2))
+    )
+    expected = returns.mean() / denominator * np.sqrt(252)
+    assert result.metrics.annual_return == pytest.approx(0.10)
+    assert getattr(result.metrics, metric) == pytest.approx(expected)
+    optimized = optimize_parameters(
+        frame,
+        lambda _frame, _params: (entries, exits),
+        {"candidate": [1]},
+        optimization_metric=metric,
+        settings=settings,
+    )
+    assert optimized.best_metric_value == pytest.approx(expected)
+    assert vbt.settings["returns"]["year_freq"] == global_year_freq
+
+
+@pytest.mark.parametrize("chunk_threshold", [1, 100])
+def test_profit_factor_optimization_ranks_actual_trade_evidence(chunk_threshold):
+    index = pd.bdate_range("2024-01-02", periods=6)
+    frame = pd.DataFrame({"close": [100, 120, 100, 90, 100, 100]}, index=index)
+    candidates = {
+        "no_losses": ([0], [1]),
+        "finite": ([0, 2], [1, 3]),
+        "no_trades": ([], []),
+        "no_realized_pnl": ([4], [5]),
+    }
+
+    def signals(_frame, params):
+        entry_positions, exit_positions = candidates[params["candidate"]]
+        entries = pd.Series(False, index=index)
+        exits = pd.Series(False, index=index)
+        entries.iloc[entry_positions] = True
+        exits.iloc[exit_positions] = True
+        return entries, exits
+
+    result = optimize_parameters(
+        frame,
+        signals,
+        {"candidate": list(reversed(candidates))},
+        optimization_metric="profit_factor",
+        top_n=4,
+        settings=BacktestingSettings(
+            fees=0,
+            slippage=0,
+            optimization_chunk_threshold=chunk_threshold,
+            optimization_chunk_size_min=1,
+            optimization_chunk_size_max=2,
+        ),
+    )
+    rows = result.model_dump()["top_results"]
+    assert [row["parameters"]["candidate"] for row in rows[:2]] == [
+        "no_losses",
+        "finite",
+    ]
+    assert {row["parameters"]["candidate"] for row in rows[2:]} == {
+        "no_trades",
+        "no_realized_pnl",
+    }
+    assert result.best_metric_value is None
+    assert result.best_metric_status == "no_losses"
+    assert rows[1]["profit_factor"] == pytest.approx(5 / 3)
+    for row in rows:
+        assert row["profit_factor_status"] == row["parameters"]["candidate"]
+        assert (row["profit_factor"] is not None) == (
+            row["profit_factor_status"] == "finite"
+        )
+        entries, exits = signals(frame, row["parameters"])
+        backtest = run_backtest(
+            frame, entries, exits, settings=BacktestingSettings(fees=0, slippage=0)
+        )
+        assert backtest.metrics.profit_factor_status == row["profit_factor_status"]
+        assert backtest.metrics.profit_factor == row["profit_factor"]
+        json.dumps(backtest.model_dump(), allow_nan=False)
+    json.dumps(result.model_dump(), allow_nan=False)
+
+
+@pytest.mark.parametrize("close_trade", [True, False])
+def test_trade_duration_uses_elapsed_timestamps(close_trade):
+    index = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-05"])
+    frame = pd.DataFrame({"close": [100, 105, 110]}, index=index)
+    result = run_backtest(
+        frame,
+        pd.Series([True, False, False], index=index),
+        pd.Series([False, False, close_trade], index=index),
+        settings=BacktestingSettings(fees=0, slippage=0),
+    )
+    assert result.trades[0].duration == "3 days 00:00:00"
+    assert result.metrics.avg_duration == 3.0
+    assert result.metrics.profit_factor is None
+    assert result.metrics.profit_factor_status == "no_losses"
+
+
+@pytest.mark.parametrize("metric", ["profit_factor", "sharpe_ratio"])
+def test_optimization_without_valid_candidates_has_no_best_value(ohlcv_frame, metric):
+    def invalid_signals(frame, parameters):
+        raise ValueError("invalid candidate")
+
+    result = optimize_parameters(
+        ohlcv_frame,
+        invalid_signals,
+        {"candidate": [1, 2]},
+        optimization_metric=metric,
+    )
+    assert result.valid_combinations == 0
+    assert result.total_combinations_tested == 2
+    assert result.best_parameters == {}
+    assert result.top_results == []
+    assert result.best_metric_value is None
+    assert result.best_metric_status is None
+    json.dumps(result.model_dump(), allow_nan=False)
